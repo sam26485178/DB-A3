@@ -207,3 +207,281 @@ INSERT INTO climbed VALUES (32, 'Milestoan Mounten', '09/06/2002');
 INSERT INTO climbed VALUES (32, 'Milestoan Mountain', '09/06/2002');
 SELECT * FROM climbed WHERE trip_id = 32;
 
+problem 3
+
+code:
+
+CREATE PROCEDURE FindMostSimilar
+AS BEGIN
+DECLARE @numOfP int;
+DECLARE @firstN VARCHAR(30), @secondN VARCHAR(30);
+DECLARE @i int, @j int;
+DECLARE @nOfFirstPeak int, @nOfSecondPeak int;
+DECLARE @nextV int;
+DECLARE @BestfEachPerson table (mName VARCHAR(30), yName VARCHAR(30), value int);
+DECLARE @tmp int, @tmp1 int, @tmp2 int;
+DECLARE @ii int, @jj int;
+DECLARE @iv VARCHAR(30), @lv VARCHAR(30);
+
+SET @i = 1;
+SET @j = 1;
+SET @nOfFirstPeak = 0;
+SET @nOfSecondPeak = 0;
+
+SELECT @numOfP = COUNT(DISTINCT p.name)
+FROM PARTICIPATED AS P
+
+WHILE @i <= @numOfP -1
+BEGIN
+	SET @j = @i + 1
+	DECLARE @LCSOfEachPerson table (mName VARCHAR(30), yName VARCHAR(30), value int);
+	WHILE @j <= @numOfP
+	BEGIN
+		DECLARE @array table ( i int, j int, value int);
+		SET @ii = 0;
+		SET @jj = 0;
+
+		SELECT @firstN = ppp.name from(
+			SELECT ROW_NUMBER() OVER (order by pp.name) AS ROWNUM, pp.name
+			FROM (
+			SELECT DISTINCT p.name FROM participated AS p) AS pp) AS ppp
+			WHERE ppp.ROWNUM = @i
+
+		SELECT @secondN = ppp.name from(
+			SELECT ROW_NUMBER() OVER (order by pp.name) AS ROWNUM, pp.name
+			FROM (
+			SELECT DISTINCT p.name FROM participated AS p) AS pp) AS ppp
+			WHERE ppp.ROWNUM = @j
+
+		SELECT @nOfFirstPeak = COUNT(*)
+			FROM participated AS p, climbed AS c
+			WHERE p.name = @firstN AND p.trip_id = c.trip_id
+
+		SELECT @nOfSecondPeak = COUNT(*)
+			FROM participated AS p, climbed AS c
+			WHERE p.name = @secondN AND p.trip_id = c.trip_id
+
+		WHILE @ii <= @nOfFirstPeak
+ 		BEGIN
+ 			INSERT @array(i, j, [value])
+ 			VALUES(@ii, 0, 0);
+ 			SET @ii = @ii + 1;
+ 		END
+ 		WHILE @jj <= @nOfSecondPeak
+ 		BEGIN
+ 			INSERT @array(i, j, [value])
+ 			VALUES(0,@jj,0);
+ 			SET @jj = @jj + 1;
+ 		END
+
+ 		SET @ii = 1;
+ 		SET @jj = 1;
+
+ 		WHILE @ii <= @nOfFirstPeak
+ 		BEGIN
+ 			SELECT @iv = cc.peak from (
+				SELECT ROW_NUMBER() OVER (order by c.when_climbed) AS ROWNUM, c.peak, c.when_climbed
+				FROM(
+					SELECT DISTINCT climbed.peak, climbed.when_climbed
+						from participated, climbed
+						where participated.trip_id = climbed.trip_id AND participated.name = @firstN
+				) as c) as cc
+				where cc.ROWNUM = @ii
+			WHILE @jj <= @nOfSecondPeak
+			BEGIN
+				SELECT @lv = cc.peak from (
+				SELECT ROW_NUMBER() OVER (order by c.when_climbed) AS ROWNUM, c.peak, c.when_climbed
+				FROM(
+					SELECT DISTINCT climbed.peak, climbed.when_climbed
+						from participated, climbed
+						where participated.trip_id = climbed.trip_id AND participated.name = @secondN
+				) as c) as cc
+				where cc.ROWNUM = @jj
+
+				IF @iv = @lv
+				BEGIN
+					SELECT @nextV = value +1
+						FROM @array a WHERE a.i = @ii -1 AND a.j = @jj -1
+				END	
+				ELSE
+				BEGIN
+					SELECT @tmp1 = value
+						FROM @array a WHERE a.i = @ii -1 AND a.j = @jj
+					SELECT @tmp2 = value
+						FROM @array a WHERE a.i = @ii AND a.j = @jj -1
+					IF @tmp1 >= @tmp2 SELECT @nextV = @tmp1
+					ELSE SELECT @nextV = @tmp2
+				END
+				INSERT @array(i,j,[value])
+				VALUES(@ii,@jj,@nextV);
+				SET @jj = @jj + 1;
+			END
+			SET @ii = @ii +1;
+			SET @jj = 1;
+ 		END
+ 		SELECT @nextV = value
+ 		FROM @array a WHERE a.i = @nOfFirstPeak AND a.j = @nOfSecondPeak
+ 		DELETE FROM @array
+
+		INSERT @LCSOfEachPerson(mName, yName, [value])
+			VALUES(@firstN, @secondN, @nextV)
+		SET @j = @j + 1
+	END
+	SELECT @tmp = max(l.value)
+		FROM @LCSOfEachPerson l 
+	SELECT @firstN = mName
+		FROM @LCSOfEachPerson l WHERE l.value = @tmp
+	SELECT @secondN = yName
+		FROM @LCSOfEachPerson l WHERE l.value = @tmp
+	INSERT @BestfEachPerson(mName, yName, [value])
+		VALUES(@firstN, @secondN, @tmp)
+	DELETE FROM @LCSOfEachPerson
+	SET @i = @i +1
+END
+
+SELECT @firstN = bb.mName FROM(
+SELECT * 
+FROM @BestfEachPerson AS b 
+WHERE b.value >= ALL(
+SELECT value
+FROM @BestfEachPerson
+)) AS bb
+
+SELECT @secondN = bb.yName FROM(
+SELECT * 
+FROM @BestfEachPerson AS b 
+WHERE b.value >= ALL(
+SELECT value
+FROM @BestfEachPerson
+)) AS bb
+
+SELECT @nOfFirstPeak = COUNT(*)
+	FROM participated AS p, climbed AS c
+	WHERE p.name = @firstN AND p.trip_id = c.trip_id
+
+SELECT @nOfSecondPeak = COUNT(*)
+	FROM participated AS p, climbed AS c
+	WHERE p.name = @secondN AND p.trip_id = c.trip_id
+
+SET @ii = 0;
+SET @jj = 0;
+
+DELETE FROM @array
+
+WHILE @ii <= @nOfFirstPeak
+BEGIN
+	INSERT @array(i, j, [value])
+	VALUES(@ii, 0, 0);
+	SET @ii = @ii + 1;
+END
+WHILE @jj <= @nOfSecondPeak
+BEGIN
+	INSERT @array(i, j, [value])
+	VALUES(0,@jj,0);
+	SET @jj = @jj + 1;
+END
+
+SET @ii = 1;
+SET @jj = 1;
+
+WHILE @ii <= @nOfFirstPeak
+BEGIN
+	SELECT @iv = cc.peak from (
+	SELECT ROW_NUMBER() OVER (order by c.when_climbed) AS ROWNUM, c.peak, c.when_climbed
+	FROM(
+		SELECT DISTINCT climbed.peak, climbed.when_climbed
+			from participated, climbed
+			where participated.trip_id = climbed.trip_id AND participated.name = @firstN
+	) as c) as cc
+	where cc.ROWNUM = @ii
+	WHILE @jj <= @nOfSecondPeak
+	BEGIN
+		SELECT @lv = cc.peak from (
+		SELECT ROW_NUMBER() OVER (order by c.when_climbed) AS ROWNUM, c.peak, c.when_climbed
+		FROM(
+			SELECT DISTINCT climbed.peak, climbed.when_climbed
+				from participated, climbed
+				where participated.trip_id = climbed.trip_id AND participated.name = @secondN
+		) as c) as cc
+		where cc.ROWNUM = @jj
+
+		IF @iv = @lv
+		BEGIN
+			SELECT @nextV = value +1
+				FROM @array a WHERE a.i = @ii -1 AND a.j = @jj -1
+		END	
+		ELSE
+		BEGIN
+			SELECT @tmp1 = value
+				FROM @array a WHERE a.i = @ii -1 AND a.j = @jj
+			SELECT @tmp2 = value
+				FROM @array a WHERE a.i = @ii AND a.j = @jj -1
+			IF @tmp1 >= @tmp2 SELECT @nextV = @tmp1
+			ELSE SELECT @nextV = @tmp2
+		END
+		INSERT @array(i,j,[value])
+		VALUES(@ii,@jj,@nextV);
+		SET @jj = @jj + 1;
+	END
+	SET @ii = @ii +1;
+	SET @jj = 1;
+END
+
+SELECT @tmp = value
+FROM @array a WHERE a.i = @nOfFirstPeak AND a.j = @nOfSecondPeak
+
+DECLARE @lcslist table(n int,peak VARCHAR(30));
+
+SET @ii = @nOfFirstPeak;
+SET @jj = @nOfSecondPeak;
+
+WHILE (@ii > 0 AND @jj > 0)
+BEGIN
+	SELECT @iv = cc.peak from (
+	SELECT ROW_NUMBER() OVER (order by c.when_climbed) AS ROWNUM, c.peak, c.when_climbed
+	FROM(
+		SELECT DISTINCT climbed.peak, climbed.when_climbed
+			from participated, climbed
+			where participated.trip_id = climbed.trip_id AND participated.name = @firstN
+	) as c) as cc
+	where cc.ROWNUM = @ii
+
+	SELECT @lv = cc.peak from (
+	SELECT ROW_NUMBER() OVER (order by c.when_climbed) AS ROWNUM, c.peak, c.when_climbed
+	FROM(
+		SELECT DISTINCT climbed.peak, climbed.when_climbed
+			from participated, climbed
+			where participated.trip_id = climbed.trip_id AND participated.name = @secondN
+	) as c) as cc
+	where cc.ROWNUM = @jj
+
+	IF (@iv = @lv) 
+	BEGIN
+		INSERT @lcslist(n, peak)
+		VALUES (@tmp, @iv)
+		SET @tmp = @tmp -1;
+		SET @ii = @ii -1;
+		SET @jj = @jj -1;
+	END
+	ELSE
+	BEGIN
+		SELECT @tmp1 = value 
+		FROM @array a
+		WHERE a.i = @ii AND a.j = @jj -1
+		SELECT @tmp2 = value 
+		FROM @array a
+		WHERE a.i = @ii-1 AND a.j = @jj 
+		IF @tmp1 >= @tmp2 SET @jj = @jj -1
+		ELSE SET @ii = @ii - 1
+	END
+END
+
+PRINT 'The two most similar climbers are ' + @firstN + ' and ' + @secondN+'.'
+PRINT ' '
+PRINT 'The longest sequence of peak ascents common to both is:'
+
+SELECT peak AS ' ' FROM @lcslist ORDER BY n 
+
+END
+GO
+
